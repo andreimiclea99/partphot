@@ -1,50 +1,77 @@
 const express = require('express');
 const multer = require('multer');
 const { BlobServiceClient } = require('@azure/storage-blob');
-const inMemoryStorage = multer.memoryStorage();
-const uploadStrategy = multer({ storage: inMemoryStorage }).array('photos');
-const { BlobServiceClient } = require("@azure/storage-blob");
-const { DefaultAzureCredential } = require("@azure/identity");
 
-// Set up the connection to Azure Blob Storage
-const blobServiceClient = new BlobServiceClient(
-  `https://photosand.blob.core.windows.net/`,
-  new DefaultAzureCredential()
-);
+// The connection string for your Azure Storage account
+const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
+const AZURE_STORAGE_CONTAINER_NAME = process.env.AZURE_STORAGE_CONTAINER_NAME;
 
-const containerClient = blobServiceClient.getContainerClient(photosand);
+// Configure multer middleware to store uploaded files in memory
+const upload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: function (req, file, cb) {
+    // Accept only png, jpg, and jpeg file types
+    if (file.mimetype !== 'image/png' && file.mimetype !== 'image/jpg' && file.mimetype !== 'image/jpeg') {
+      return cb(new Error('Only .png, .jpg and .jpeg format allowed!'), false);
+    }
+    cb(null, true);
+  },
+  limits: {
+    // Accept only files up to 7MB in size
+    fileSize: 7 * 1024 * 1024
+  }
+});
 
+// Create an Express.js app
 const app = express();
-app.use(express.json());
 
-const azureStorageConnectionString = '<Your Azure Storage Connection String>';
-const containerName = '<Your Azure Blob Storage Container Name>';
+// Initialize Azure Storage client
+const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
+const containerClient = blobServiceClient.getContainerClient(AZURE_STORAGE_CONTAINER_NAME);
 
-const blobServiceClient = BlobServiceClient.fromConnectionString(azureStorageConnectionString);
-const containerClient = blobServiceClient.getContainerClient(containerName);
-
-app.post('/upload', uploadStrategy, async (req, res) => {
-  if (!req.files) {
-    res.status(400).send('No file uploaded.');
-    return;
-  }
-
+app.post('/upload', upload.array('photos'), async (req, res) => {
   try {
-    const promises = req.files.map(async (file) => {
-      const blobName = Date.now() + '-' + file.originalname; // Add a timestamp to ensure unique blob names
-      const blockBlobClient = containerClient.getBlockBlobClient(blobName);
-      await blockBlobClient.uploadData(file.buffer);
-    });
+    // Loop over each uploaded file
+    for (const file of req.files) {
+      const blobName = file.originalname;
+      const blobClient = containerClient.getBlobClient(blobName);
+      const blockBlobClient = blobClient.getBlockBlobClient();
 
-    // Wait for all uploads to finish
-    await Promise.all(promises);
-    res.status(200).send('File uploaded successfully.');
-  } catch (error) {
-    console.error(error);
-    res.status(500).send('Error uploading file.');
+      // Upload the file to Azure Storage
+      await blockBlobClient.upload(file.buffer, file.buffer.length);
+    }
+
+    res.send('Files uploaded successfully');
+  } catch (err) {
+    res.status(500).send(err.message);
   }
 });
 
-app.listen(3000, () => {
-  console.log('Server started on port 3000');
+app.get('/files', async (req, res) => {
+  try {
+    const blobs = containerClient.listBlobsFlat();
+    const files = [];
+
+    // Iterate over each blob in the container and push its name to an array
+    for await (const blob of blobs) {
+      files.push(blob.name);
+    }
+
+    // Send the array of file names in the response
+    res.send(files);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
 });
+
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    // A Multer error occurred when uploading.
+    res.status(400).send(err.message);
+  } else if (err) {
+    // An unknown error occurred.
+    res.status(500).send(err.message);
+  }
+});
+
+app.listen(3000, () => console.log('Server is listening on port 3000'));
