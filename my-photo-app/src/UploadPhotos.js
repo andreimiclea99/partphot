@@ -76,6 +76,7 @@ const UploadPhotos = () => {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [userName, setUserName] = useState("");
   const navigate  = useNavigate(); // Get the history object
+  const [uploadMessage, setUploadMessage] = useState('');
   const handleViewGallery = () => {
     navigate('/gallery');
   }
@@ -126,17 +127,18 @@ const UploadPhotos = () => {
       formData.append("photos", file);
     });
 
-
     try {
       // Make a POST request to the backend server to upload files
       await axios.post("http://localhost:3000/upload", formData);
-
-      // Reset the form after successful upload
+      console.log('Post request completed'); // New console log
       setSelectedFiles([]);
-      //setUserName("");
+      console.log('setSelectedFiles called'); // New console log
+      setUploadMessage(`Successfully uploaded ${selectedFiles.length} files`);
+      console.log('setUploadMessage called'); // New console log
     } catch (error) {
       console.error("Error uploading files:", error);
       // Handle any error that occurred during the upload
+      setUploadMessage('Error uploading files');
     }
   };
 
@@ -174,6 +176,7 @@ const UploadPhotos = () => {
           </button> {/* Add the Gallery View button here */}
         </form>
         <ImagePreview selectedFiles={selectedFiles} />
+        {uploadMessage && <p>{uploadMessage}</p>} {/* Display the success message here */}
       </div>
     </>  
   );

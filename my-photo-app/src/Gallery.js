@@ -9,9 +9,17 @@ function App() {
 
   // Fetch data from backend
   useEffect(() => {
-    fetch('/api/media') // Replace with your API endpoint
-      .then(response => response.json())
-      .then(data => setData(data));
+    fetch('http://localhost:3000/files')
+      .then(response => {
+        console.log('Status code:', response.status);
+        console.log('Status text:', response.statusText);
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        return response.json();
+      })
+      .then(data => setData(data))
+      .catch(error => console.error('Error:', error));
   }, []);
 
   const images = data.filter(item => item.type === 'image');
@@ -60,7 +68,15 @@ function App() {
   );
 
   function downloadAll() {
-    // Implement download all functionality
+    // For each file, create a temporary link element and click it to start the download
+    data.forEach((file) => {
+      const link = document.createElement('a');
+      link.href = file.url;
+      link.download = file.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
   }
 }
 

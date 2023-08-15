@@ -1,9 +1,15 @@
 const express = require('express');
 const multer = require('multer');
 const { BlobServiceClient } = require('@azure/storage-blob');
+require('dotenv').config();
+// Create an Express.js app
+const app = express();
+const cors = require('cors');
+app.use(cors());
 
 // The connection string for your Azure Storage account
-const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
+//const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
+const AZURE_SAS_URL = process.env.AZURE_SAS_URL;
 const AZURE_STORAGE_CONTAINER_NAME = process.env.AZURE_STORAGE_CONTAINER_NAME;
 
 // Configure multer middleware to store uploaded files in memory
@@ -22,11 +28,9 @@ const upload = multer({
   }
 });
 
-// Create an Express.js app
-const app = express();
-
 // Initialize Azure Storage client
-const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
+//const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
+const blobServiceClient = new BlobServiceClient(AZURE_SAS_URL);
 const containerClient = blobServiceClient.getContainerClient(AZURE_STORAGE_CONTAINER_NAME);
 
 app.post('/upload', upload.array('photos'), async (req, res) => {
@@ -49,20 +53,21 @@ app.post('/upload', upload.array('photos'), async (req, res) => {
 
 app.get('/files', async (req, res) => {
   try {
-    const blobs = containerClient.listBlobsFlat();
-    const files = [];
-
-    // Iterate over each blob in the container and push its name to an array
-    for await (const blob of blobs) {
-      files.push(blob.name);
+    let media = [];
+    for await (const blob of containerClient.listBlobsFlat()) {
+      console.log('Blob name:', blob.name);
+      const url = containerClient.getBlobClient(blob.name).url;
+      console.log('Blob URL:', url);
+      const type = blob.name.endsWith('.jpg') || blob.name.endsWith('.png') || blob.name.endsWith('.jpeg') ? 'image' : 'video';
+      media.push({ type, url });
     }
-
-    // Send the array of file names in the response
-    res.send(files);
-  } catch (err) {
-    res.status(500).send(err.message);
+    res.json(media);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ message: 'Internal Server Error', error: error.message });
   }
 });
+
 
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
@@ -73,5 +78,6 @@ app.use((err, req, res, next) => {
     res.status(500).send(err.message);
   }
 });
+app.use(cors({ origin: 'http://localhost:3001' }));
 
 app.listen(3000, () => console.log('Server is listening on port 3000'));
