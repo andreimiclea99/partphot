@@ -1,31 +1,28 @@
-# Stage 1: Build the React frontend
-FROM node:14-alpine as build-front
-WORKDIR /app
-COPY my-photo-app/package.json my-photo-app/package-lock.json ./
-RUN npm ci
-COPY my-photo-app/ ./
-RUN npm run build
+# Fetching the latest node image on alpine linux
+FROM node:alpine
 
-# Stage 2: Build the Node.js backend
-FROM node:14-alpine as build-back
-WORKDIR /app
-COPY backend/package.json backend/package-lock.json ./
-RUN npm ci
-COPY backend/ ./
-RUN npm run build
+# Setting up the work directory for React app
+WORKDIR /react-app
 
-# Stage 3: Setup the final Docker image
-FROM node:14-alpine as final
-WORKDIR /app
+# Installing dependencies for React app
+COPY ./my-photo-app/package.json ./
+RUN npm install
 
-# Copy the Node.js backend
-COPY --from=build-back /app /app
+# Copying all the files from React folder
+COPY ./my-photo-app ./
 
-# Copy the React frontend to the public directory
-COPY --from=build-front /app/build ./public
+# Setup for Node.js backend
+WORKDIR /backend
+COPY ./backend/package*.json ./
+RUN npm install
+COPY ./backend ./
+
+# Copy the start script
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
 
 # Expose port 3000 for the Node.js server
 EXPOSE 3000
 
-# Start the Node.js server
-CMD ["node", "server.js"]
+# Start both apps using the script
+CMD ["/start.sh"]
